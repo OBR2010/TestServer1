@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Chat App</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <style>
+        :root {
+            --primary-color: #7C3AED;
+            --secondary-color: #4F46E5;
+            --background-color: #F3F4F6;
+            --text-color: #1F2937;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: var(--background-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 4rem);
+            width: 95%;
+        }
+
+        .chat-header {
+            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-radius: 1rem 1rem 0 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .online-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: #10B981;
+            border-radius: 50%;
+        }
+
+        .messages {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 1rem;
+            border-radius: 1rem;
+            position: relative;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.received {
+            background: #F3F4F6;
+            align-self: flex-start;
+            border-bottom-left-radius: 0.25rem;
+        }
+
+        .message.sent {
+            background: var(--primary-color);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.25rem;
+        }
+
+        .message img {
+            max-width: 100%;
+            border-radius: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .message-info {
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+            opacity: 0.7;
+        }
+
+        .input-area {
+            padding: 1.5rem;
+            background: white;
+            border-top: 1px solid #E5E7EB;
+            border-radius: 0 0 1rem 1rem;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .message-input {
+            flex-grow: 1;
+            padding: 1rem;
+            border: 2px solid #E5E7EB;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .send-button, .upload-button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .send-button:hover, .upload-button:hover {
+            background: var(--secondary-color);
+            transform: translateY(-2px);
+        }
+
+        .image-preview {
+            max-width: 200px;
+            margin-top: 1rem;
+            border-radius: 0.5rem;
+            display: none;
+        }
+
+        .typing-indicator {
+            padding: 1rem;
+            color: #6B7280;
+            font-style: italic;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .chat-container {
+                margin: 0;
+                height: 100vh;
+                width: 100%;
+                border-radius: 0;
+            }
+
+            .chat-header {
+                border-radius: 0;
+            }
+
+            .message {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>Modern Chat</h1>
+            <div class="online-status">
+                <div class="status-dot"></div>
+                <span>Online</span>
+            </div>
+        </div>
+        
+        <div class="messages" id="messages"></div>
+        
+        <div class="typing-indicator" id="typingIndicator" style="display: none;">
+            Someone is typing...
+        </div>
+        
+        <div class="input-area">
+            <div class="input-container">
+                <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                <button class="upload-button" onclick="document.getElementById('imageInput').click()">
+                    <i class="fas fa-image"></i>
+                </button>
+                <input type="text" class="message-input" id="messageInput" placeholder="Type your message...">
+                <button class="send-button" id="sendButton">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+            <img id="imagePreview" class="image-preview">
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let username = localStorage.getItem('username');
+        
+        if (!username) {
+            username = prompt('Please enter your username:') || 'Anonymous';
+            localStorage.setItem('username', username);
+        }
+
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const imageInput = document.getElementById('imageInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const typingIndicator = document.getElementById('typingIndicator');
+
+        let typingTimeout;
+
+        function addMessage(data) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${data.user === username ? 'sent' : 'received'}`;
+            
+            let content = '';
+            if (data.type === 'image') {
+                content = `<img src="${data.imageUrl}" alt="Shared image">`;
+            } else {
+                content = data.message;
+            }
+            
+            messageDiv.innerHTML = `
+                ${content}
+                <div class="message-info">
+                    ${data.user} • ${new Date(data.timestamp).toLocaleTimeString()}
+                </div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Load message history
+        socket.on('load_history', (history) => {
+            history.forEach(addMessage);
+        });
+
+        // Handle new messages
+        socket.on('message', addMessage);
+
+        // Send message function
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message) {
+                socket.emit('message', { user: username, message });
+                messageInput.value = '';
+            }
+        }
+
+        // Handle image upload
+        imageInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Preview image
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+
+                // Upload image
+                const formData = new FormData();
+                formData.append('image', file);
+
+                try {
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        socket.emit('image_message', {
+                            user: username,
+                            imageUrl: data.imageUrl
+                        });
+                        imagePreview.style.display = 'none';
+                        imageInput.value = '';
+                    }
+                } catch (error) {
+                    console.error('Error uploading image:', error);
+                    alert('Failed to upload image');
+                }
+            }
+        });
+
+        // Typing indicator
+        messageInput.addEventListener('input', () => {
+            clearTimeout(typingTimeout);
+            socket.emit('typing', { user: username });
+            
+            typingTimeout = setTimeout(() => {
+                socket.emit('stop_typing', { user: username });
+            }, 1000);
+        });
+
+        socket.on('typing', (data) => {
+            if (data.user !== username) {
+                typingIndicator.textContent = `${data.user} is typing...`;
+                typingIndicator.style.display = 'block';
+            }
+        });
+
+        socket.on('stop_typing', () => {
+            typingIndicator.style.display = 'none';
+        });
+
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Add smooth scroll behavior
+        messagesDiv.style.scrollBehavior = 'smooth';
+
+        // Connection status handling
+        socket.on('connect', () => {
+            document.querySelector('.status-dot').style.background = '#10B981';
+        });
+
+        socket.on('disconnect', () => {
+            document.querySelector('.status-dot').style.background = '#EF4444';
+        });
+
+        // Message effects
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        });
+
+        // Observe new messages for animation
+        const observeMessage = (message) => {
+            message.style.opacity = '0';
+            message.style.transform = 'translateY(20px)';
+            observer.observe(message);
+        };
+
+        // Image lazy loading
+        if ('loading' in HTMLImageElement.prototype) {
+            document.querySelectorAll('img').forEach(img => {
+                img.loading = 'lazy';
+            });
+        }
+    </script>
+</body>
+</html>
